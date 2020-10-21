@@ -1,39 +1,15 @@
-import re
+import shlex
 
 # Parser
 # 	- Tokenizer (Lexer): Split input into discrete tokens
-#	- Syntactic Analysis: construct AST (Abstract Syntax Tree)
+#	- Syntactic Analysis: construct AST (Abstract Syntax Tree) from tokens
 
-# Parse a command outline and construct a ShepCMD object.
-# "/watchlist add Player:player String:reason='Toxicity' Duration:time=1d" 
-# => Tokenizer =>
-# ['watchlist', 'add', 'Player', ':', 'player', 'String', ':', 'reason', '=', ,"\'", 'Toxicity', "\'", 'Duration', ':', 'time', '=', '1d']
-# => Syntactic analyzer =>
-# AST = {
-# 	'Command Outline'
-# 	'outline': [
-# 		'watchlist',
-# 		'add',
-# 		{
-# 			'ShepParam'
-# 			'type': 'Player'
-# 			'name': 'player'
-# 			'default_val': None
-# 		},
-# 		{
-# 			'ShepParam'
-# 			'type': 'String'
-# 			'name': 'reason'
-# 			'default_val': 'Toxicity'
-# 		},
-# 		{
-# 			'ShepParam'
-# 			'type': 'Duration'
-# 			'name': 'player'
-# 			'default_val': Duration('1d')
-# 		}
-# 	]
-# }
+def smart_split(string, delimeters=' '):
+	# split, ignoring delimiteres which are in quotes
+	splitter = shlex.shlex(string, posix=True)
+	splitter.whitespace += delimeters
+	splitter.whitespace_split = True
+	return list(splitter)
 
 class ShepType():
 	def __init__(self, class_name, constructor):
@@ -62,10 +38,15 @@ class ShepCMD:
 	types = {
 		'String': ShepType('String', str),
 		'Integer': ShepType('Integer', int),
+		'Number': ShepType('Float', float)
 	}
-	
-	def __init__(self, outline):
-		self.name, self.params = ShepCMD.parse(outline)
+
+	def __init__(self, outline, func=None):
+		self.name, self.params, self.optional_params = ShepCMD.parse(outline)
+		self.func = func
+
+	def execute(input):
+		args = smart_split(input)
 
 	def parse(outline):
 		tokens = ShepCMD.tokenize(outline)
@@ -73,36 +54,38 @@ class ShepCMD:
 
 	def tokenize(outline):
 		# TODO: make lexer more sophisticated, handling errors and allowing spaces within quotations
-		return outline.split()
+		return smart_split(outline)
 
 	def AST(tokens):
 		# TODO: make more sophisticated, handling errors and allowing all characters within quotations,
 		# disallowing optional params before non_optional params, and checking for name collisions
 		cmd_name = []
-		outline = []
+		params = []
+		optional_params = []
 		for token in tokens:
 			if ':' in token:
-				type_name_val = re.split(':|=', token)
+				type_name_val = smart_split(token, ':=')
 				if len(type_name_val) == 3:
 					shep_type, var_name, default_val = type_name_val
 					shep_type = ShepCMD.types[shep_type]
+					param = ShepParam(shep_type, var_name, default_val)
+					optional_params.append(param)
 				else:
 					shep_type, var_name = type_name_val
 					shep_type = ShepCMD.types[shep_type]
 					default_val = None
-				param = ShepParam(shep_type, var_name, default_val)
-				outline.append(param)
+					param = ShepParam(shep_type, var_name, default_val)
+					params.append(param)
 			else:
 				# token is a keyword
 				cmd_name.append(token)
 
 		
 		cmd_name = ' '.join(cmd_name)
-		params = outline
-		return cmd_name, outline
+		return cmd_name, params, optional_params
 		
 
 	def __repr__(self):
-		return "{0} \n {1}".format(self.name, self.params)
+		return "{0}\n{1}\n{2}".format(self.name, self.params, self.optional_params)
 
-# write = ShepCMD('watchlist write String:str=bob Integer:value=3')
+write = ShepCMD('watchlist write String:str Integer:value=3')
